@@ -21,6 +21,13 @@ solar-only power budget. The bundled dashboard includes a configurable
 playability check (wind and temperature thresholds) to turn logged readings
 into a day-by-day, and eventually season-by-season, playability verdict.
 
+| | |
+|---|---|
+| ![Assembled station before mounting](docs/assets/build.jpg) | ![Mounted on-site, overlooking the disused court](docs/assets/deployed-court.jpg) |
+| Assembled unit — wind/direction sensor, sensor enclosure, solar panel | Mounted on-site, overlooking the disused court on Elba |
+| ![Internal wiring during assembly](docs/assets/electronics.jpg) | ![Close-up of the mounted sensor head](docs/assets/deployed-closeup.jpg) |
+| Internal wiring — ESP32, sensor breakout boards | Close-up of the mounted sensor head |
+
 A separate firmware variant sends a daily SMS status update over 2G — which
 works where 2G is still live (Italy) and won't work where it's been shut
 down (e.g. Switzerland, since 2020/2021) — with a no-SMS build for
