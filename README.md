@@ -1,10 +1,15 @@
 # Weather Station
 
-A solar-powered ESP32 weather station that logs temperature, humidity,
-pressure, light, and wind to an SD card, with an adaptive measurement
-schedule that follows sunrise/sunset instead of a fixed timer.
+A solar-powered ESP32 weather station built to answer a concrete question
+for a local feasibility study: is the wind at a disused tennis court site on
+Elba, Italy calm enough, often enough, to justify reinstating the court.
 
 ## Overview
+
+Locals report the site can get quite windy, which matters for a court with
+an otherwise excellent view — before the local municipality invests in
+rebuilding it, this project collects a season's worth of real, on-site
+weather data to inform that decision, rather than relying on anecdote.
 
 The station runs on a LilyGo TTGO T-SIM7000G (ESP32 + LTE/GSM modem) with
 four sensors — a BME280 inside the enclosure, an SHT20 and BH1750 outside,
@@ -12,10 +17,9 @@ and an RS485 Modbus wind/direction sensor — logging to SD card and running
 off a small solar panel through a boost converter. Instead of waking on a
 fixed interval, it computes local sunrise/sunset and spreads a configurable
 number of daily readings across daylight hours, which matters for a
-solar-only power budget. It's deployed and running on Elba, Italy, and
-originally grew out of wanting a simple, concrete answer to "is it decent
-weather to play tennis today" — the bundled dashboard includes a
-configurable playability check built for exactly that.
+solar-only power budget. The bundled dashboard includes a configurable
+playability check (wind and temperature thresholds) to turn logged readings
+into a day-by-day, and eventually season-by-season, playability verdict.
 
 A separate firmware variant sends a daily SMS status update over 2G — which
 works where 2G is still live (Italy) and won't work where it's been shut
@@ -89,9 +93,12 @@ docs/architecture.md        design notes
 
 ## Status / roadmap
 
-Deployed and actively logging on Elba, Italy. Known limitation, not a bug:
-the SMS status feature depends on 2G coverage and simply doesn't work in
-regions that have shut 2G down.
+Deployed and actively logging on-site on Elba, Italy. The plan is to let it
+collect data through roughly a full season — into the start of next
+season — before analyzing wind/temperature patterns against the
+playability thresholds to inform the court decision. Known limitation, not
+a bug: the SMS status feature depends on 2G coverage and simply doesn't
+work in regions that have shut 2G down.
 
 ## License
 
