@@ -1,0 +1,1698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weather Station — Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent-blue: #58a6ff;
+    --accent-orange: #f78166;
+    --accent-green: #3fb950;
+    --accent-yellow: #d29922;
+    --accent-purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+
+  /* ── Drop overlay ── */
+  #drop-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(13,17,23,0.88);
+    border: 3px dashed var(--accent-blue);
+    border-radius: 12px;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px;
+    font-size: 1.3rem; font-weight: 600; color: var(--accent-blue);
+  }
+  #drop-overlay.active { display: flex; }
+  #drop-overlay .icon { font-size: 3rem; }
+
+  /* ── Header ── */
+  header {
+    background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 22px 32px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.4px; }
+  header h1 span { color: var(--accent-blue); }
+  #file-meta { font-size: 0.8rem; color: var(--muted); margin-top: 3px; }
+
+  .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+  /* session start time input */
+  .start-time-wrap {
+    display: flex; align-items: center; gap: 7px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 10px;
+  }
+  .start-time-wrap label { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+  #start-time-input {
+    background: none; border: none; color: var(--text);
+    font-size: 0.82rem; cursor: pointer; outline: none;
+    color-scheme: dark;
+  }
+  #clear-start-time {
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0;
+    transition: color 0.12s;
+  }
+  #clear-start-time:hover { color: var(--text); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #1c3a1c; color: var(--accent-green); border: 1px solid #2d5a2d;
+    border-radius: 20px; padding: 3px 10px; font-size: 0.78rem; font-weight: 600;
+  }
+  .badge::before { content: '●'; font-size: 0.6rem; }
+
+  /* ── Load CSV button ── */
+  #load-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 7px 14px;
+    font-size: 0.83rem; font-weight: 500; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #load-btn:hover { border-color: var(--accent-blue); background: #1c2230; }
+  #csv-input { display: none; }
+
+  /* ── Day selector bar ── */
+  .day-selector-wrap {
+    padding: 16px 32px 0;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .day-selector-label {
+    font-size: 0.72rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.8px; white-space: nowrap; margin-right: 4px;
+  }
+  .day-pills { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+  .day-pill {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 20px; padding: 5px 13px;
+    font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .day-pill:hover { border-color: var(--accent-blue); color: var(--text); }
+  .day-pill.active {
+    background: var(--accent-blue); border-color: var(--accent-blue);
+    color: #000;
+  }
+  .day-pills-sub {
+    margin-top: 4px; padding-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+  .day-pill-sm {
+    padding: 3px 10px; font-size: 0.72rem;
+  }
+  .chart-mode-label {
+    font-size: 0.72rem; color: var(--muted); margin-left: auto; white-space: nowrap;
+  }
+
+  /* ── Charts ── */
+  .charts-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px; padding: 0 32px 32px;
+  }
+  .chart-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+  }
+  .chart-card.wide { grid-column: span 2; }
+  .chart-card h3 {
+    font-size: 0.82rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .chart-card h3 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  canvas { display: block; }
+
+  /* ── Wind rose offset control ── */
+  .wind-rose-layout { display: flex; flex-direction: column; gap: 14px; }
+  .offset-control {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+  }
+  .offset-control label { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+  .offset-control .btn-step {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; width: 28px; height: 28px; font-size: 1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.12s;
+  }
+  .offset-control .btn-step:hover { border-color: var(--accent-blue); }
+  #offset-input {
+    width: 70px; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: 4px 8px;
+    font-size: 0.85rem; text-align: center;
+  }
+  #offset-input:focus { outline: none; border-color: var(--accent-blue); }
+  .offset-display {
+    font-size: 0.8rem; color: var(--accent-blue); font-weight: 600; margin-left: 4px;
+  }
+  #reset-offset {
+    margin-left: auto; font-size: 0.75rem; color: var(--muted); background: none;
+    border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px;
+    cursor: pointer; transition: color 0.12s, border-color 0.12s;
+  }
+  #reset-offset:hover { color: var(--text); border-color: var(--accent-blue); }
+
+  footer {
+    text-align: center; padding: 18px; font-size: 0.74rem; color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+  footer strong { color: var(--text); }
+
+  /* ── Playability section ── */
+  .play-section {
+    margin: 0 32px 32px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .play-header {
+    background: linear-gradient(90deg, #1a2535 0%, #161b22 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 22px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .play-header h2 { font-size: 0.95rem; font-weight: 700; letter-spacing: -0.2px; }
+  .play-header .pill {
+    font-size: 0.72rem; background: #1c2a40; color: var(--accent-blue);
+    border: 1px solid #234; border-radius: 20px; padding: 2px 9px;
+  }
+
+  .play-body { padding: 20px 22px; display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+  @media (max-width: 900px) { .play-body { grid-template-columns: 1fr; } }
+
+  .play-controls { display: flex; flex-direction: column; gap: 14px; }
+  .ctrl-group { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .ctrl-group h4 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 10px; }
+
+  .ctrl-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .ctrl-row:last-child { margin-bottom: 0; }
+  .ctrl-row label { font-size: 0.78rem; color: var(--muted); min-width: 110px; }
+  .ctrl-row input[type="number"], .ctrl-row input[type="text"], .ctrl-row select {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: 5px 8px; font-size: 0.82rem;
+  }
+  .ctrl-row input:focus, .ctrl-row select:focus { outline: none; border-color: var(--accent-blue); }
+  .ctrl-row .unit { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+
+  #fetch-btn {
+    width: 100%; padding: 9px; border-radius: 8px;
+    background: var(--accent-blue); color: #000; font-weight: 700;
+    font-size: 0.85rem; border: none; cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  #fetch-btn:hover { opacity: 0.85; }
+  #fetch-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  #fetch-status { font-size: 0.75rem; color: var(--muted); text-align: center; min-height: 18px; }
+
+  /* Session verdict */
+  .play-results { display: flex; flex-direction: column; gap: 16px; }
+  .verdict-row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .verdict-card {
+    flex: 1; min-width: 140px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .verdict-card h4 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 8px; }
+  .verdict-big {
+    font-size: 1.35rem; font-weight: 800; display: flex; align-items: center; gap: 8px;
+  }
+  .verdict-big.pass { color: #3fb950; }
+  .verdict-big.fail { color: #f78166; }
+  .verdict-big.warn { color: #d29922; }
+
+  /* Baseline chart area */
+  .baseline-chart-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .baseline-chart-wrap h4 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .baseline-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .b-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; text-align: center; }
+  .b-stat .bv { font-size: 1.1rem; font-weight: 700; color: var(--accent-blue); }
+  .b-stat .bl { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+
+  .play-placeholder {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 180px; color: var(--muted); font-size: 0.85rem; text-align: center;
+  }
+
+  /* ── Per-day breakdown cards ── */
+  .day-breakdown { display: flex; flex-direction: column; gap: 10px; }
+  .day-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 13px 15px;
+    border-left: 3px solid var(--border);
+    overflow: hidden;
+  }
+  .day-card.full { border-left-color: #3fb950; }
+  .day-card.good { border-left-color: #58a6ff; }
+  .day-card.warn { border-left-color: #d29922; }
+  .day-card.bad  { border-left-color: #f78166; }
+  .day-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+  .day-label { font-size: 0.88rem; font-weight: 700; }
+  .day-vpill {
+    font-size: 0.7rem; font-weight: 700; border-radius: 20px; padding: 2px 9px; border: 1px solid;
+  }
+  .day-vpill.full { background:#1c3a1c; color:#3fb950; border-color:#2d5a2d; }
+  .day-vpill.good { background:#1c2a40; color:#58a6ff; border-color:#234869; }
+  .day-vpill.warn { background:#2a2010; color:#d29922; border-color:#554020; }
+  .day-vpill.bad  { background:#3a1c1c; color:#f78166; border-color:#5a2d2d; }
+  .day-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .day-bar-track { flex: 1; min-width: 0; height: 7px; border-radius: 4px; }
+  .day-pct { font-size: 0.85rem; font-weight: 800; min-width: 36px; text-align: right; }
+  .day-meta { font-size: 0.72rem; color: var(--muted); margin-bottom: 7px; }
+  .day-checks { display: flex; gap: 14px; flex-wrap: wrap; }
+  .day-chk { font-size: 0.77rem; display: flex; align-items: center; gap: 5px; }
+
+  /* ── Month groups ── */
+  .month-group { display: flex; flex-direction: column; }
+  .month-toggle {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text); padding: 11px 14px;
+    display: flex; align-items: center; gap: 10px; cursor: pointer;
+    font-size: 0.82rem; text-align: left; transition: background 0.15s;
+  }
+  .month-toggle:hover { background: #2a3040; }
+  .month-toggle.open {
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+    border-bottom-color: transparent;
+  }
+  .month-name { font-weight: 700; min-width: 120px; white-space: nowrap; }
+  .month-mini-bar {
+    width: 80px; height: 6px; flex-shrink: 0;
+    background: var(--border); border-radius: 3px; overflow: hidden; display: flex;
+  }
+  .month-mini-seg { height: 100%; }
+  .month-day-stats { flex: 1; font-size: 0.74rem; color: var(--muted); }
+  .month-arrow { color: var(--muted); font-size: 0.8rem; transition: transform 0.2s; flex-shrink: 0; }
+  .month-toggle.open .month-arrow { transform: rotate(180deg); }
+  .month-days {
+    display: none; flex-direction: column; gap: 8px;
+    border: 1px solid var(--border); border-top: none;
+    border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;
+    padding: 10px; background: var(--bg);
+  }
+  .month-days.open { display: flex; }
+
+  /* ── Session summary ── */
+  #session-summary {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 15px;
+  }
+  .summary-bar {
+    display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 10px; gap: 2px;
+  }
+  .sum-block { height: 100%; border-radius: 3px; transition: width 0.5s ease; min-width: 0; }
+  .sum-full { background: #3fb950; }
+  .sum-good { background: #58a6ff; }
+  .sum-warn { background: #d29922; }
+  .sum-bad  { background: #f78166; }
+  .summary-legend {
+    display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .leg-item { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--muted); }
+  .leg-dot  { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .summary-stats {
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .sum-stat {
+    flex: 1; min-width: 90px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 12px; text-align: center;
+  }
+  .sum-stat .sv { font-size: 1.3rem; font-weight: 800; }
+  .sum-stat .sl { font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
+
+  /* ── Baseline (secondary / comparison) ── */
+  .baseline-secondary {
+    margin-top: 6px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+  }
+  .baseline-toggle {
+    width: 100%; background: none; border: none; color: var(--muted);
+    font-size: 0.75rem; font-weight: 600; padding: 9px 14px;
+    text-align: left; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .baseline-toggle:hover { color: var(--text); }
+  .baseline-toggle .arrow { margin-left: auto; transition: transform 0.2s; }
+  .baseline-toggle.open .arrow { transform: rotate(180deg); }
+  .baseline-inner { padding: 12px 14px 14px; display: none; }
+  .baseline-inner.open { display: block; }
+
+  /* ── Empty state ── */
+  #empty-state {
+    display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    min-height: 60vh; gap: 16px; color: var(--muted);
+  }
+  #empty-state .big { font-size: 3.5rem; }
+  #empty-state p { font-size: 1rem; }
+  #empty-state .hint { font-size: 0.82rem; opacity: 0.7; }
+
+  #dashboard { display: block; }
+</style>
+</head>
+<body>
+
+<!-- Drop overlay (appears when dragging a file over window) -->
+<div id="drop-overlay">
+  <div class="icon">📂</div>
+  Drop CSV to load
+</div>
+
+<!-- Header -->
+<header>
+  <div>
+    <h1>🌤 Weather Station — <span>Dashboard</span></h1>
+    <div id="file-meta">Drag a CSV file anywhere, or click Load CSV</div>
+  </div>
+  <div class="header-right">
+    <div class="badge" id="solar-badge" style="display:none">Solar Charging Active</div>
+
+    <!-- Session start time -->
+    <div class="start-time-wrap" title="Set the real start time so chart axes show clock time instead of elapsed minutes">
+      <label>🕐 Session start</label>
+      <input type="datetime-local" id="start-time-input" step="1">
+      <button id="clear-start-time" title="Clear">×</button>
+    </div>
+
+    <button id="load-btn" onclick="document.getElementById('csv-input').click()">
+      📂 Load CSV
+    </button>
+    <input type="file" id="csv-input" accept=".csv">
+  </div>
+</header>
+
+<!-- Empty state (shown before any CSV loaded) -->
+<div id="empty-state">
+  <div class="big">🌤</div>
+  <p>No data loaded yet</p>
+  <p class="hint">Drag &amp; drop a <strong style="color:var(--text)">weather.csv</strong> file anywhere on this page,<br>or click <strong style="color:var(--text)">Load CSV</strong> in the top right.</p>
+</div>
+
+<!-- Main dashboard (hidden until CSV loaded) -->
+<div id="dashboard" style="display:none">
+
+  <div class="day-selector-wrap">
+    <span class="day-selector-label">View</span>
+    <div class="day-pills" id="day-pills"></div>
+    <span class="chart-mode-label" id="chart-mode-label"></span>
+  </div>
+
+  <div class="charts-grid">
+
+    <div class="chart-card wide">
+      <h3><span class="dot" style="background:#f78166"></span>Temperature — Inside vs Outside</h3>
+      <canvas id="tempChart" height="90"></canvas>
+    </div>
+
+    <div class="chart-card">
+      <h3><span class="dot" style="background:#58a6ff"></span>Humidity</h3>
+      <canvas id="humChart" height="150"></canvas>
+    </div>
+
+    <div class="chart-card">
+      <h3><span class="dot" style="background:#bc8cff"></span>Barometric Pressure</h3>
+      <canvas id="pressChart" height="150"></canvas>
+    </div>
+
+    <div class="chart-card">
+      <h3><span class="dot" style="background:#ffd700"></span>Light Intensity (lux)</h3>
+      <canvas id="lightChart" height="150"></canvas>
+    </div>
+
+    <div class="chart-card">
+      <h3><span class="dot" style="background:#39d353"></span>Wind Speed (km/h)</h3>
+      <canvas id="windChart" height="150"></canvas>
+    </div>
+
+    <div class="chart-card">
+      <h3><span class="dot" style="background:#3fb950"></span>Battery %</h3>
+      <canvas id="battChart" height="150"></canvas>
+    </div>
+
+    <!-- Wind Rose with offset control -->
+    <div class="chart-card">
+      <h3><span class="dot" style="background:#58a6ff"></span>Wind Direction Distribution</h3>
+      <div class="wind-rose-layout">
+        <div class="offset-control">
+          <label>Anemometer offset</label>
+          <button class="btn-step" id="btn-minus" title="−22.5°">−</button>
+          <input type="number" id="offset-input" value="0" step="1" min="-359" max="359">
+          <span style="font-size:0.78rem;color:var(--muted)">°</span>
+          <button class="btn-step" id="btn-plus" title="+22.5°">+</button>
+          <span class="offset-display" id="offset-display"></span>
+          <button id="reset-offset">Reset</button>
+        </div>
+        <div style="display:flex;justify-content:center">
+          <canvas id="windRoseChart" width="280" height="280"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Playability Analysis ── -->
+  <div class="play-section">
+    <div class="play-header">
+      <span style="font-size:1.2rem">🎾</span>
+      <h2>Playability Analysis</h2>
+      <span class="pill">Open-Meteo ERA5 baseline · Tennis · Elba, Italy</span>
+    </div>
+    <div class="play-body">
+
+      <!-- Controls column -->
+      <div class="play-controls">
+
+        <div class="ctrl-group">
+          <h4>🎯 Playability Thresholds</h4>
+          <div class="ctrl-row">
+            <label>Max wind speed</label>
+            <input type="number" id="th-wind" value="30" min="5" max="100" style="width:60px;flex:none" title="Recreational tennis: serve toss becomes unreliable above 30 km/h">
+            <span class="unit">km/h</span>
+          </div>
+          <div class="ctrl-row">
+            <label>Max wind gusts</label>
+            <input type="number" id="th-gusts" value="40" min="5" max="120" style="width:60px;flex:none">
+            <span class="unit">km/h</span>
+          </div>
+          <div class="ctrl-row">
+            <label>Min temperature</label>
+            <input type="number" id="th-tmin" value="10" min="-20" max="30" style="width:60px;flex:none">
+            <span class="unit">°C</span>
+          </div>
+          <div class="ctrl-row">
+            <label>Max temperature</label>
+            <input type="number" id="th-tmax" value="35" min="20" max="50" style="width:60px;flex:none" title="Above 35°C extended outdoor play becomes heat-dangerous">
+            <span class="unit">°C</span>
+          </div>
+          <div class="ctrl-row">
+            <label>Max rain</label>
+            <input type="number" id="th-rain" value="0" min="0" max="10" step="0.1" style="width:60px;flex:none">
+            <span class="unit">mm</span>
+          </div>
+        </div>
+
+        <div class="ctrl-group">
+          <h4>📍 Location</h4>
+          <div class="ctrl-row">
+            <label>City / Place</label>
+            <input type="text" id="city-input" placeholder="e.g. Elba, Italy" style="flex:1">
+          </div>
+          <div class="ctrl-row">
+            <label>Latitude</label>
+            <input type="number" id="lat-input" value="42.76" step="0.01">
+          </div>
+          <div class="ctrl-row">
+            <label>Longitude</label>
+            <input type="number" id="lon-input" value="10.29" step="0.01">
+          </div>
+          <div class="ctrl-row" style="margin-top:4px">
+            <label>Baseline period</label>
+            <select id="years-select">
+              <option value="3">Last 3 years</option>
+              <option value="5" selected>Last 5 years</option>
+              <option value="10">Last 10 years</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="fetch-btn">Fetch Historical Baseline</button>
+        <div id="fetch-status"></div>
+      </div>
+
+      <!-- Results column -->
+      <div class="play-results">
+
+        <!-- Session summary (always at top) -->
+        <div id="session-summary" style="display:none">
+          <div class="summary-bar">
+            <div class="sum-block sum-full"  id="sum-full"></div>
+            <div class="sum-block sum-good"  id="sum-good"></div>
+            <div class="sum-block sum-warn"  id="sum-warn"></div>
+            <div class="sum-block sum-bad"   id="sum-bad"></div>
+          </div>
+          <div class="summary-legend" id="summary-legend"></div>
+          <div class="summary-stats" id="summary-stats"></div>
+        </div>
+
+        <!-- Per-day breakdown -->
+        <div id="day-breakdown-area">
+          <div id="day-breakdown-placeholder" class="play-placeholder" style="min-height:120px">
+            Load a CSV to see per-day playability.
+          </div>
+          <div id="day-breakdown" class="day-breakdown" style="display:none"></div>
+        </div>
+
+        <!-- Historical baseline (secondary / collapsible) -->
+        <div class="baseline-secondary">
+          <button class="baseline-toggle" id="baseline-toggle" onclick="toggleBaseline()">
+            <span>📊</span>
+            <span id="baseline-title">Historical Baseline — ERA5 Comparison</span>
+            <span class="arrow">▾</span>
+          </button>
+          <div class="baseline-inner" id="baseline-inner">
+            <div id="baseline-placeholder" class="play-placeholder" style="min-height:100px;font-size:0.8rem">
+              Click <strong style="color:var(--text);margin:0 4px">Fetch Historical Baseline</strong> to load ERA5 data.
+            </div>
+            <div id="baseline-chart-area" style="display:none">
+              <canvas id="baselineChart" height="120"></canvas>
+              <div class="baseline-stats" id="baseline-stats"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer id="footer" style="display:none"></footer>
+
+<script>
+// ─────────────────────────────────────────────
+//  State
+// ─────────────────────────────────────────────
+let rawRows = [];          // all parsed CSV rows
+let windDirDegs = [];      // raw numeric wind_dir_deg values
+let windOffset = 0;        // current offset in degrees
+let sessionStartMs = null; // real-world start time (ms since epoch), or null
+
+// Chart instances (so we can destroy before re-creating)
+const charts = {};
+
+const WIND_DIRS_16 = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+
+// ─────────────────────────────────────────────
+//  CSV parsing
+// ─────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return null;
+  const headers = lines[0].split(',').map(h => h.trim());
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = lines[i].split(',');
+    if (vals.length < headers.length) continue;
+    const row = {};
+    headers.forEach((h, j) => row[h] = vals[j] ? vals[j].trim() : '');
+    rows.push(row);
+  }
+  return { headers, rows };
+}
+
+// ─────────────────────────────────────────────
+//  Wind rose bucketing (with offset)
+// ─────────────────────────────────────────────
+function buildWindRoseCounts(degs, offsetDeg) {
+  const counts = new Array(16).fill(0);
+  for (const d of degs) {
+    const adjusted = ((d - offsetDeg) % 360 + 360) % 360;
+    // Each sector is 22.5° wide, centred on its heading
+    const idx = Math.round(adjusted / 22.5) % 16;
+    counts[idx]++;
+  }
+  return counts;
+}
+
+// Describe offset as compass direction
+function offsetLabel(deg) {
+  if (deg === 0) return '';
+  const norm = ((deg % 360) + 360) % 360;
+  const idx = Math.round(norm / 22.5) % 16;
+  return `→ corrected by ${deg > 0 ? '+' : ''}${deg}° (anem. N was ${WIND_DIRS_16[idx]})`;
+}
+
+// ─────────────────────────────────────────────
+//  Chart helpers
+// ─────────────────────────────────────────────
+const gridColor = 'rgba(48,54,61,0.6)';
+const textColor = '#8b949e';
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function baseOpts(yOpts = {}) {
+  const every   = Math.ceil((rawRows.length / 10) / 12);
+  const useReal = sessionStartMs !== null;
+  return {
+    responsive: true,
+    animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: textColor, boxWidth: 12, font: { size: 11 } } },
+      tooltip: {
+        backgroundColor: '#1c2128', borderColor: '#30363d', borderWidth: 1,
+        titleColor: '#e6edf3', bodyColor: '#8b949e',
+        callbacks: { title: tooltipTitle }
+      }
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: textColor, maxRotation: 0, font: { size: 10 },
+          callback(v, i) {
+            if (i % every !== 0) return '';
+            const lbl = this.getLabelForValue(v);
+            return useReal ? lbl : lbl + ' min';
+          }
+        },
+        title: { display: true, text: xAxisLabel(), color: textColor, font: { size: 10 } },
+        grid: { color: gridColor }, border: { color: gridColor }
+      },
+      y: {
+        ticks: { color: textColor, font: { size: 10 }, ...yOpts.ticks },
+        grid: { color: gridColor }, border: { color: gridColor },
+        ...yOpts
+      }
+    }
+  };
+}
+
+// ─────────────────────────────────────────────
+//  Navigation state
+// ─────────────────────────────────────────────
+// Three levels: session overview → month overview → single day
+let selectedMonthKey = null;  // null = all months; 'YYYY-MM' or 'mN' = specific month
+let selectedDayIdx   = null;  // null = overview; number = index into dayGroups
+
+let dayGroups  = [];  // [{label, monthKey, monthLabel, rows}]
+let monthIndex = [];  // [{key, label, days:[...dayGroups]}]
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const LARGE_THRESHOLD = 14; // switch to hierarchical nav when session > N days
+
+function groupByDay() {
+  const map = new Map();
+  const t0  = parseFloat(rawRows[0].timestamp_ms);
+  for (const r of rawRows) {
+    const ms  = parseFloat(r.timestamp_ms);
+    const key = Math.floor((ms - t0) / 86400000);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  }
+  const sorted = [...map.entries()].sort((a, b) => a[0] - b[0]);
+  return sorted.map(([dayIdx, rows], i) => {
+    let label, monthKey, monthLabel;
+    if (sessionStartMs) {
+      const d   = new Date(sessionStartMs + dayIdx * 86400000);
+      label      = `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
+      monthKey   = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      monthLabel = `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+    } else {
+      const mIdx = Math.floor(i / 30);
+      label      = sorted.length > 1 ? `Day ${i+1}` : 'Session';
+      monthKey   = `m${mIdx}`;
+      monthLabel = sorted.length > LARGE_THRESHOLD ? `Month ${mIdx+1}` : 'Session';
+    }
+    return { label, monthKey, monthLabel, rows };
+  });
+}
+
+function buildMonthIndex() {
+  const map = new Map();
+  for (const g of dayGroups) {
+    if (!map.has(g.monthKey)) map.set(g.monthKey, { key: g.monthKey, label: g.monthLabel, days: [] });
+    map.get(g.monthKey).days.push(g);
+  }
+  return [...map.values()];
+}
+
+function activeDayGroups() {
+  // Return the dayGroups relevant to the current month selection
+  if (!selectedMonthKey) return dayGroups;
+  return dayGroups.filter(g => g.monthKey === selectedMonthKey);
+}
+
+// ─────────────────────────────────────────────
+//  Navigation pill builder
+// ─────────────────────────────────────────────
+function buildDayPills() {
+  dayGroups  = groupByDay();
+  monthIndex = buildMonthIndex();
+
+  const wrap      = document.getElementById('day-pills').parentElement;
+  const container = document.getElementById('day-pills');
+
+  // Remove any existing sub-row
+  const existing = document.getElementById('day-pills-sub');
+  if (existing) existing.remove();
+
+  const large = dayGroups.length > LARGE_THRESHOLD;
+
+  if (!large) {
+    // ── Flat: Overview + one pill per day ──────────────────────────────────────
+    container.innerHTML = [
+      pill('Overview', selectedDayIdx === null && !selectedMonthKey, `selectNav(null,null)`),
+      ...dayGroups.map((g, i) => pill(g.label, selectedDayIdx === i, `selectNav(null,${i})`))
+    ].join('');
+  } else {
+    // ── Hierarchical: month pills in row 1 ─────────────────────────────────────
+    container.innerHTML = [
+      pill('Overview', !selectedMonthKey && selectedDayIdx === null, `selectNav(null,null)`),
+      ...monthIndex.map(m => pill(m.label, selectedMonthKey === m.key && selectedDayIdx === null,
+        `selectNav('${m.key}',null)`))
+    ].join('');
+
+    // Day sub-row when a month is selected
+    if (selectedMonthKey) {
+      const monthDays = activeDayGroups();
+      const sub = document.createElement('div');
+      sub.id        = 'day-pills-sub';
+      sub.className = 'day-pills day-pills-sub';
+      sub.innerHTML = [
+        pill('Month overview', selectedDayIdx === null, `selectNav('${selectedMonthKey}',null)`, true),
+        ...monthDays.map((g, i) => {
+          const globalIdx = dayGroups.indexOf(g);
+          return pill(g.label, selectedDayIdx === globalIdx, `selectNav('${selectedMonthKey}',${globalIdx})`, true);
+        })
+      ].join('');
+      wrap.appendChild(sub);
+    }
+  }
+
+  updateModeLabel();
+}
+
+function pill(label, active, onclick, small = false) {
+  return `<button class="day-pill${active ? ' active' : ''}${small ? ' day-pill-sm' : ''}" onclick="${onclick}">${label}</button>`;
+}
+
+function selectNav(monthKey, dayIdx) {
+  selectedMonthKey = monthKey;
+  selectedDayIdx   = dayIdx;
+  buildDayPills();
+  renderCharts();
+}
+
+// Keep old selectDay name for session-start-time handlers
+function selectDay(idx) { selectNav(selectedMonthKey, idx); }
+
+function updateModeLabel() {
+  const el = document.getElementById('chart-mode-label');
+  if (selectedDayIdx !== null) {
+    el.textContent = `${dayGroups[selectedDayIdx].rows.length} measurements`;
+  } else if (selectedMonthKey) {
+    const m = monthIndex.find(m => m.key === selectedMonthKey);
+    el.textContent = `${m ? m.label : ''} · ${activeDayGroups().length} days · daily averages`;
+  } else {
+    el.textContent = dayGroups.length > 1 ? `${dayGroups.length} days · daily averages` : '';
+  }
+}
+
+// ─────────────────────────────────────────────
+//  Data helpers
+// ─────────────────────────────────────────────
+function stat(field, rows) {
+  rows = rows || rawRows;
+  const vals = rows.map(r => parseFloat(r[field])).filter(v => !isNaN(v));
+  if (!vals.length) return { min: 0, max: 0, avg: 0 };
+  return {
+    min: Math.min(...vals),
+    max: Math.max(...vals),
+    avg: vals.reduce((a, b) => a + b, 0) / vals.length
+  };
+}
+
+function buildChartData(field, aggFn) {
+  aggFn = aggFn || 'avg';
+
+  if (selectedDayIdx !== null) {
+    // Single day: individual readings
+    const rows = dayGroups[selectedDayIdx].rows;
+    const t0   = parseFloat(rows[0].timestamp_ms);
+    const t0raw = parseFloat(rawRows[0].timestamp_ms);
+    const labels = rows.map(r => {
+      if (sessionStartMs) {
+        const d = new Date(sessionStartMs + parseFloat(r.timestamp_ms) - t0raw);
+        return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      }
+      return ((parseFloat(r.timestamp_ms) - t0) / 60000).toFixed(0) + ' min';
+    });
+    return { labels, data: rows.map(r => parseFloat(r[field]) || null) };
+  }
+
+  // Session or month overview: daily aggregates
+  const groups = activeDayGroups();
+  return {
+    labels: groups.map(g => g.label),
+    data:   groups.map(g => { const s = stat(field, g.rows); return parseFloat(s[aggFn].toFixed(2)); })
+  };
+}
+
+function buildTempBandData(field) {
+  if (selectedDayIdx !== null) return null;
+  const groups = activeDayGroups();
+  return {
+    mins: groups.map(g => parseFloat(stat(field, g.rows).min.toFixed(1))),
+    avgs: groups.map(g => parseFloat(stat(field, g.rows).avg.toFixed(1))),
+    maxs: groups.map(g => parseFloat(stat(field, g.rows).max.toFixed(1))),
+  };
+}
+
+function xLabel() {
+  if (selectedDayIdx !== null) return sessionStartMs ? 'Time of day' : 'Elapsed (min)';
+  return activeDayGroups().length > 1 ? 'Date' : 'Time of day';
+}
+
+function tooltipTitle(items) { return items[0].label; }
+
+function dominantDir(rows) {
+  rows = rows || rawRows;
+  const counts = {};
+  for (const r of rows) {
+    const d = r.wind_dir_bearing;
+    if (d) counts[d] = (counts[d] || 0) + 1;
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+}
+
+// Solar badge (based on all data)
+function updateSolarBadge() {
+  const pct = Math.round(rawRows.filter(r => r.solar_charging === '1').length / rawRows.length * 100);
+  document.getElementById('solar-badge').style.display = pct >= 90 ? 'inline-flex' : 'none';
+}
+
+// ─────────────────────────────────────────────
+//  Chart options builder (adapted for current view)
+// ─────────────────────────────────────────────
+function baseOpts(yOpts = {}) {
+  const isOverview  = selectedDayIdx === null && activeDayGroups().length > 1;
+  const pointR      = isOverview ? 4 : 0;
+  const pointHover  = isOverview ? 6 : 4;
+  return {
+    responsive: true,
+    animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: textColor, boxWidth: 12, font: { size: 11 } } },
+      tooltip: {
+        backgroundColor: '#1c2128', borderColor: '#30363d', borderWidth: 1,
+        titleColor: '#e6edf3', bodyColor: '#8b949e',
+        callbacks: { title: tooltipTitle }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: textColor, maxRotation: isOverview ? 45 : 0, font: { size: 10 } },
+        title: { display: true, text: xLabel(), color: textColor, font: { size: 10 } },
+        grid: { color: gridColor }, border: { color: gridColor }
+      },
+      y: {
+        ticks: { color: textColor, font: { size: 10 }, ...yOpts.ticks },
+        grid: { color: gridColor }, border: { color: gridColor },
+        ...yOpts
+      }
+    }
+  };
+}
+
+// ─────────────────────────────────────────────
+//  Render all charts
+// ─────────────────────────────────────────────
+function renderCharts() {
+  const isOverview = selectedDayIdx === null && activeDayGroups().length > 1;
+
+  // ── Temperature ──────────────────────────────
+  destroyChart('tempChart');
+  if (isOverview) {
+    const band_out = buildTempBandData('outside_temp_C');
+    const band_in  = buildTempBandData('inside_temp_C');
+    const labels   = activeDayGroups().map(g => g.label);
+    charts.tempChart = new Chart(document.getElementById('tempChart'), {
+      type: 'line',
+      data: { labels, datasets: [
+        { label: 'Outside max (°C)', data: band_out.maxs, borderColor: '#f78166', backgroundColor: 'rgba(247,129,102,0.12)', borderWidth: 2, pointRadius: 4, tension: 0.3, fill: false, borderDash: [4,3] },
+        { label: 'Outside avg (°C)', data: band_out.avgs, borderColor: '#f78166', backgroundColor: 'rgba(247,129,102,0.0)', borderWidth: 2, pointRadius: 4, tension: 0.3, fill: false },
+        { label: 'Outside min (°C)', data: band_out.mins, borderColor: '#f78166', backgroundColor: 'rgba(247,129,102,0.12)', borderWidth: 2, pointRadius: 4, tension: 0.3, fill: '-1', borderDash: [4,3] },
+        { label: 'Inside avg (°C)',  data: band_in.avgs,  borderColor: '#ff9500', backgroundColor: 'rgba(255,149,0,0.0)',   borderWidth: 1.5, pointRadius: 3, tension: 0.3, fill: false, borderDash: [2,3] },
+      ]},
+      options: baseOpts({ ticks: { callback: v => v + '°C' } })
+    });
+  } else {
+    const rows   = selectedDayIdx !== null ? dayGroups[selectedDayIdx].rows : rawRows;
+    const cd_out = buildChartData('outside_temp_C');
+    const cd_in  = buildChartData('inside_temp_C');
+    charts.tempChart = new Chart(document.getElementById('tempChart'), {
+      type: 'line',
+      data: { labels: cd_out.labels, datasets: [
+        { label: 'Outside (°C)', data: cd_out.data, borderColor: '#f78166', backgroundColor: 'rgba(247,129,102,0.08)', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: true },
+        { label: 'Inside (°C)',  data: cd_in.data,  borderColor: '#ff9500', backgroundColor: 'rgba(255,149,0,0.06)',   borderWidth: 2, pointRadius: 0, tension: 0.3 }
+      ]},
+      options: baseOpts({ ticks: { callback: v => v + '°C' } })
+    });
+  }
+
+  // ── Humidity ─────────────────────────────────
+  const cd_hum_out = buildChartData('outside_hum_pct');
+  const cd_hum_in  = buildChartData('inside_hum_pct');
+  destroyChart('humChart');
+  charts.humChart = new Chart(document.getElementById('humChart'), {
+    type: 'line',
+    data: { labels: cd_hum_out.labels, datasets: [
+      { label: 'Outside (%)', data: cd_hum_out.data, borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.08)', borderWidth: 2, pointRadius: isOverview ? 4 : 0, tension: 0.3 },
+      { label: 'Inside (%)',  data: cd_hum_in.data,  borderColor: '#bc8cff', backgroundColor: 'rgba(188,140,255,0.08)', borderWidth: 2, pointRadius: isOverview ? 4 : 0, tension: 0.3 }
+    ]},
+    options: baseOpts({ ticks: { callback: v => v + '%' } })
+  });
+
+  // ── Pressure ─────────────────────────────────
+  const cd_press = buildChartData('pressure_hPa');
+  const ps       = stat('pressure_hPa');
+  destroyChart('pressChart');
+  charts.pressChart = new Chart(document.getElementById('pressChart'), {
+    type: 'line',
+    data: { labels: cd_press.labels, datasets: [
+      { label: 'Pressure (hPa)', data: cd_press.data, borderColor: '#bc8cff', backgroundColor: 'rgba(188,140,255,0.1)', borderWidth: 2, pointRadius: isOverview ? 4 : 0, tension: 0.2, fill: true }
+    ]},
+    options: baseOpts({ min: Math.floor(ps.min) - 1, max: Math.ceil(ps.max) + 1 })
+  });
+
+  // ── Light ────────────────────────────────────
+  // In overview: show daily max (peak sunshine). In day view: individual readings.
+  const cd_light = buildChartData('light_lux', isOverview ? 'max' : 'avg');
+  destroyChart('lightChart');
+  charts.lightChart = new Chart(document.getElementById('lightChart'), {
+    type: isOverview ? 'bar' : 'line',
+    data: { labels: cd_light.labels, datasets: [
+      { label: isOverview ? 'Peak light (lux)' : 'Light (lux)', data: cd_light.data,
+        borderColor: '#ffd700', backgroundColor: isOverview ? 'rgba(255,215,0,0.4)' : 'rgba(255,215,0,0.08)',
+        borderWidth: isOverview ? 0 : 2, pointRadius: 0, tension: 0.2, fill: !isOverview,
+        borderRadius: isOverview ? 4 : 0 }
+    ]},
+    options: baseOpts({ ticks: { callback: v => v >= 1000 ? (v/1000).toFixed(0)+'k' : v } })
+  });
+
+  // ── Wind speed ───────────────────────────────
+  const cd_wind_avg = buildChartData('wind_speed_kmh', 'avg');
+  const cd_wind_max = isOverview ? buildChartData('wind_speed_kmh', 'max') : null;
+  destroyChart('windChart');
+  charts.windChart = new Chart(document.getElementById('windChart'), {
+    type: 'bar',
+    data: { labels: cd_wind_avg.labels, datasets: [
+      { label: isOverview ? 'Avg wind (km/h)' : 'Wind (km/h)',
+        data: cd_wind_avg.data,
+        backgroundColor: 'rgba(57,211,83,0.45)', borderColor: '#39d353', borderWidth: 0, borderRadius: 3 },
+      ...(isOverview ? [{
+        label: 'Peak wind (km/h)',
+        data: cd_wind_max.data,
+        type: 'line',
+        borderColor: '#f78166', backgroundColor: 'transparent',
+        borderWidth: 2, pointRadius: 3, tension: 0.2
+      }] : [])
+    ]},
+    options: baseOpts({ ticks: { callback: v => v + ' km/h' } })
+  });
+
+  // ── Battery ──────────────────────────────────
+  const cd_batt = buildChartData('battery_pct');
+  const bs      = stat('battery_pct');
+  destroyChart('battChart');
+  charts.battChart = new Chart(document.getElementById('battChart'), {
+    type: 'line',
+    data: { labels: cd_batt.labels, datasets: [
+      { label: 'Battery (%)', data: cd_batt.data, borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,0.1)', borderWidth: 2, pointRadius: isOverview ? 4 : 0, tension: 0.2, fill: true }
+    ]},
+    options: baseOpts({ min: Math.max(0, bs.min - 5), max: Math.min(100, bs.max + 5), ticks: { callback: v => v + '%' } })
+  });
+
+  // ── Wind rose (always uses all rows of current view) ──
+  renderWindRose();
+}
+
+// ─────────────────────────────────────────────
+//  Wind rose (re-renderable with offset)
+// ─────────────────────────────────────────────
+function renderWindRose() {
+  // Use the active day's rows if a day is selected, otherwise all data
+  const activeDegs = selectedDayIdx !== null
+    ? dayGroups[selectedDayIdx].rows.map(r => parseFloat(r.wind_dir_deg)).filter(v => !isNaN(v))
+    : windDirDegs;
+  const counts = buildWindRoseCounts(activeDegs, windOffset);
+  const max = Math.max(...counts);
+
+  destroyChart('windRoseChart');
+  charts.windRoseChart = new Chart(document.getElementById('windRoseChart'), {
+    type: 'polarArea',
+    data: {
+      labels: WIND_DIRS_16,
+      datasets: [{
+        data: counts,
+        backgroundColor: counts.map(v => {
+          const a = (0.2 + 0.7 * (v / (max || 1))).toFixed(2);
+          return `rgba(88,166,255,${a})`;
+        }),
+        borderColor: 'rgba(88,166,255,0.35)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: false, animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { backgroundColor: '#1c2128', borderColor: '#30363d', borderWidth: 1,
+          titleColor: '#e6edf3', bodyColor: '#8b949e',
+          callbacks: { label: ctx => ` ${ctx.raw} samples` }
+        }
+      },
+      scales: {
+        r: {
+          ticks: { color: textColor, font: { size: 9 }, backdropColor: 'transparent',
+            stepSize: Math.ceil(max / 4) },
+          grid: { color: gridColor },
+          pointLabels: { color: textColor, font: { size: 10, weight: '600' } }
+        }
+      }
+    }
+  });
+
+  // Update offset label
+  document.getElementById('offset-display').textContent = offsetLabel(windOffset);
+}
+
+// ─────────────────────────────────────────────
+//  Update footer
+// ─────────────────────────────────────────────
+function renderFooter(filename) {
+  const t0 = parseFloat(rawRows[0].timestamp_ms);
+  const t1 = parseFloat(rawRows[rawRows.length - 1].timestamp_ms);
+  const dur = (t1 - t0) / 60000;
+  const h = Math.floor(dur / 60), m = Math.round(dur % 60);
+  const el = document.getElementById('footer');
+  el.style.display = 'block';
+  el.innerHTML = `<strong>${filename}</strong> · ${rawRows.length.toLocaleString()} readings · ${h}h ${m}m · sampled every ${sampleEvery()} rows for charts`;
+}
+
+function sampleEvery() { return Math.max(1, Math.floor(rawRows.length / 322)); }
+
+// ─────────────────────────────────────────────
+//  Load CSV → trigger full render
+// ─────────────────────────────────────────────
+function loadCSV(text, filename) {
+  const parsed = parseCSV(text);
+  if (!parsed || !parsed.rows.length) {
+    alert('Could not parse CSV — make sure it has headers and data rows.');
+    return;
+  }
+
+  rawRows = parsed.rows;
+
+  // Extract raw wind direction degrees
+  windDirDegs = rawRows
+    .map(r => parseFloat(r.wind_dir_deg))
+    .filter(v => !isNaN(v));
+
+  // Reset offset
+  windOffset = 0;
+  document.getElementById('offset-input').value = 0;
+  document.getElementById('offset-display').textContent = '';
+
+  // Update file meta
+  const t0 = parseFloat(rawRows[0].timestamp_ms);
+  const t1 = parseFloat(rawRows[rawRows.length - 1].timestamp_ms);
+  const dur = Math.round((t1 - t0) / 60000);
+  document.getElementById('file-meta').textContent =
+    `${filename} · ${rawRows.length.toLocaleString()} samples · ${Math.floor(dur / 60)}h ${dur % 60}m`;
+
+  // Show dashboard
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+
+  selectedDayIdx   = null;  // reset to overview on new file
+  selectedMonthKey = null;
+  buildDayPills();
+  updateSolarBadge();
+  renderCharts();
+  renderFooter(filename);
+  evaluateSession();
+}
+
+// ─────────────────────────────────────────────
+//  File input & drag-drop
+// ─────────────────────────────────────────────
+document.getElementById('csv-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => loadCSV(ev.target.result, file.name);
+  reader.readAsText(file);
+  e.target.value = ''; // allow re-selecting same file
+});
+
+// Drag onto anywhere in the window
+window.addEventListener('dragenter', e => {
+  if (e.dataTransfer.types.includes('Files'))
+    document.getElementById('drop-overlay').classList.add('active');
+});
+window.addEventListener('dragleave', e => {
+  if (!e.relatedTarget || e.relatedTarget === document.documentElement)
+    document.getElementById('drop-overlay').classList.remove('active');
+});
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  document.getElementById('drop-overlay').classList.remove('active');
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.name.endsWith('.csv')) {
+    alert('Please drop a .csv file.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = ev => loadCSV(ev.target.result, file.name);
+  reader.readAsText(file);
+});
+
+// ─────────────────────────────────────────────
+//  Wind offset controls
+// ─────────────────────────────────────────────
+function applyOffset(val) {
+  windOffset = ((val % 360) + 360) % 360;
+  if (windOffset > 180) windOffset -= 360; // keep in [-180, 180]
+  document.getElementById('offset-input').value = val; // keep raw value user typed
+  renderWindRose();
+}
+
+document.getElementById('btn-plus').addEventListener('click', () => {
+  const cur = parseInt(document.getElementById('offset-input').value) || 0;
+  const next = cur + 22;
+  document.getElementById('offset-input').value = next;
+  applyOffset(next);
+});
+document.getElementById('btn-minus').addEventListener('click', () => {
+  const cur = parseInt(document.getElementById('offset-input').value) || 0;
+  const next = cur - 22;
+  document.getElementById('offset-input').value = next;
+  applyOffset(next);
+});
+document.getElementById('offset-input').addEventListener('input', e => {
+  const val = parseInt(e.target.value);
+  if (!isNaN(val)) applyOffset(val);
+});
+document.getElementById('reset-offset').addEventListener('click', () => {
+  document.getElementById('offset-input').value = 0;
+  applyOffset(0);
+});
+
+// ─────────────────────────────────────────────
+//  Session start time controls
+// ─────────────────────────────────────────────
+document.getElementById('start-time-input').addEventListener('change', e => {
+  const val = e.target.value;
+  sessionStartMs = val ? new Date(val).getTime() : null;
+  if (rawRows.length) { selectedMonthKey = null; selectedDayIdx = null; buildDayPills(); renderCharts(); evaluateSession(); }
+});
+
+document.getElementById('clear-start-time').addEventListener('click', () => {
+  document.getElementById('start-time-input').value = '';
+  sessionStartMs = null;
+  if (rawRows.length) { selectedMonthKey = null; selectedDayIdx = null; buildDayPills(); renderCharts(); evaluateSession(); }
+});
+
+// ─────────────────────────────────────────────
+//  Show empty state on load, then auto-fetch baseline
+// ─────────────────────────────────────────────
+document.getElementById('empty-state').style.display = 'flex';
+document.getElementById('dashboard').style.display = 'none';
+
+// Auto-fetch Elba baseline on page load (coordinates already pre-filled)
+window.addEventListener('load', () => {
+  document.getElementById('fetch-btn').click();
+  // Start baseline panel closed — it opens after user's data is loaded
+});
+
+
+// ═══════════════════════════════════════════════════════════════
+//  PLAYABILITY ANALYSIS
+// ═══════════════════════════════════════════════════════════════
+
+// ── Thresholds ──────────────────────────────
+function getThresholds() {
+  return {
+    wind:  parseFloat(document.getElementById('th-wind').value)  || 30,
+    gusts: parseFloat(document.getElementById('th-gusts').value) || 45,
+    tmin:  parseFloat(document.getElementById('th-tmin').value)  ?? 10,
+    tmax:  parseFloat(document.getElementById('th-tmax').value)  || 38,
+    rain:  parseFloat(document.getElementById('th-rain').value)  ?? 0,
+  };
+}
+
+// ── Session verdict from loaded CSV ─────────
+function evaluateSession() {
+  if (!rawRows.length) return;
+  const th = getThresholds();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // ── Group rows by day ────────────────────────────────────────────────────────
+  // Key: integer day index from timestamp_ms (0 = first day of session)
+  const dayMap = new Map();
+  for (const r of rawRows) {
+    const ms  = parseFloat(r.timestamp_ms) || 0;
+    const idx = Math.floor(ms / 86400000);
+    if (!dayMap.has(idx)) dayMap.set(idx, []);
+    dayMap.get(idx).push(r);
+  }
+
+  const sortedDays = [...dayMap.entries()].sort((a, b) => a[0] - b[0]);
+
+  // ── Evaluate each day ────────────────────────────────────────────────────────
+  function evalRow(r) {
+    const wind = parseFloat(r.wind_speed_kmh) || 0;
+    const temp = parseFloat(r.outside_temp_C);
+    const windOk = wind <= th.wind;
+    const tempOk = !isNaN(temp) && temp >= th.tmin && temp <= th.tmax;
+    return { ok: windOk && tempOk, windOk, tempOk, wind, temp };
+  }
+
+  function dayClass(pct) {
+    if (pct === 100) return 'full';
+    if (pct >= 75)   return 'good';
+    if (pct >= 40)   return 'warn';
+    return 'bad';
+  }
+  function dayLabel(pct) {
+    if (pct === 100) return '✅ Fully Playable';
+    if (pct >= 75)   return '🟦 Mostly Playable';
+    if (pct >= 40)   return '⚠️ Partially Playable';
+    return '❌ Not Playable';
+  }
+  function barColor(pct) {
+    if (pct === 100) return '#3fb950';
+    if (pct >= 75)   return '#58a6ff';
+    if (pct >= 40)   return '#d29922';
+    return '#f78166';
+  }
+
+  const cards = sortedDays.map(([dayIdx, rows], i) => {
+    // Real date / month grouping
+    let dateStr, monthKey, monthLabel;
+    if (sessionStartMs) {
+      const d = new Date(sessionStartMs + dayIdx * 86400000);
+      dateStr    = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+      monthKey   = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      monthLabel = `${months[d.getMonth()]} ${d.getFullYear()}`;
+    } else {
+      const mIdx = Math.floor(i / 30); // 30-day chunks when no real date
+      dateStr    = sortedDays.length > 1 ? `Day ${i + 1}` : 'Session';
+      monthKey   = `m${mIdx}`;
+      monthLabel = sortedDays.length > 30 ? `Month ${mIdx + 1}` : 'Session';
+    }
+
+    const results  = rows.map(evalRow);
+    const playable = results.filter(r => r.ok).length;
+    const total    = results.length;
+    const pct      = total > 0 ? Math.round(playable / total * 100) : 0;
+    const cls      = dayClass(pct);
+
+    const windVals = results.map(r => r.wind).filter(v => !isNaN(v));
+    const tempVals = results.map(r => r.temp).filter(v => !isNaN(v));
+    const windMax  = windVals.length ? Math.max(...windVals) : null;
+    const tempMin  = tempVals.length ? Math.min(...tempVals) : null;
+    const tempMax  = tempVals.length ? Math.max(...tempVals) : null;
+
+    const windFail = results.filter(r => !r.windOk).length;
+    const tempFail = results.filter(r => !r.tempOk).length;
+
+    const windOk   = windFail === 0;
+    const tempOk   = tempFail === 0;
+
+    // Average lux for rain proxy
+    const luxVals  = rows.map(r => parseFloat(r.light_lux) || 0);
+    const avgLux   = luxVals.reduce((a, b) => a + b, 0) / (luxVals.length || 1);
+    const rainNote = avgLux < 1000
+      ? '<span style="color:#d29922">⚠️ Low light — possible rain/overcast</span>'
+      : '<span style="color:var(--muted)">☀️ No rain detected</span>';
+
+    return {
+      cls, dateStr, pct, playable, total,
+      windOk, tempOk, windMax, tempMin, tempMax, windFail, tempFail, rainNote,
+      monthKey, monthLabel
+    };
+  });
+
+  // ── Group days by month ───────────────────────────────────────────────────────
+  const monthMap = new Map();
+  for (const d of cards) {
+    if (!monthMap.has(d.monthKey)) monthMap.set(d.monthKey, []);
+    monthMap.get(d.monthKey).push(d);
+  }
+  const sortedMonths = [...monthMap.entries()]; // already in insertion order (days are sorted)
+
+  function dayCardHTML(d) {
+    return `
+    <div class="day-card ${d.cls}">
+      <div class="day-card-header">
+        <span class="day-label">📅 ${d.dateStr}</span>
+        <span class="day-vpill ${d.cls}">${dayLabel(d.pct)}</span>
+      </div>
+      <div class="day-bar-row">
+        <div class="day-bar-track" style="background:linear-gradient(to right,${barColor(d.pct)} ${d.pct}%,var(--border) ${d.pct}%)"></div>
+        <span class="day-pct" style="color:${barColor(d.pct)}">${d.pct}%</span>
+      </div>
+      <div class="day-meta">${d.playable} of ${d.total} measurements within playable conditions</div>
+      <div class="day-checks">
+        <span class="day-chk">
+          ${d.windOk ? '✅' : '❌'}
+          <span>Wind: <strong style="color:var(--text)">${d.windMax !== null ? d.windMax.toFixed(1) : '—'} km/h max</strong>
+          ${!d.windOk ? `<span style="color:var(--muted);font-size:0.7rem">(${d.windFail} readings over ${th.wind})</span>` : ''}</span>
+        </span>
+        <span class="day-chk">
+          ${d.tempOk ? '✅' : '❌'}
+          <span>Temp: <strong style="color:var(--text)">${d.tempMin !== null ? d.tempMin.toFixed(1) : '—'}–${d.tempMax !== null ? d.tempMax.toFixed(1) : '—'} °C</strong>
+          ${!d.tempOk ? `<span style="color:var(--muted);font-size:0.7rem">(${d.tempFail} readings outside ${th.tmin}–${th.tmax}°C)</span>` : ''}</span>
+        </span>
+        <span class="day-chk" style="font-size:0.72rem">${d.rainNote}</span>
+      </div>
+    </div>`;
+  }
+
+  function monthGroupHTML(monthLabel, days, startOpen) {
+    const mt = { full:0, good:0, warn:0, bad:0 };
+    days.forEach(d => mt[d.cls]++);
+    const n = days.length;
+    const playableN   = mt.full + mt.good;
+    const partialN    = mt.warn;
+    const unplayableN = mt.bad;
+    const avgM = Math.round(days.reduce((a, d) => a + d.pct, 0) / n);
+
+    const seg = cls => n > 0
+      ? `<span class="month-mini-seg" style="width:${mt[cls]/n*100}%;background:${{full:'#3fb950',good:'#58a6ff',warn:'#d29922',bad:'#f78166'}[cls]}"></span>`
+      : '';
+
+    const statsText = [
+      playableN   ? `<span style="color:#3fb950">${playableN} playable</span>`   : '',
+      partialN    ? `<span style="color:#d29922">${partialN} partial</span>`     : '',
+      unplayableN ? `<span style="color:#f78166">${unplayableN} not playable</span>` : '',
+    ].filter(Boolean).join(' · ');
+
+    const openCls  = startOpen ? ' open' : '';
+    const uid = monthLabel.replace(/\s/g,'_');
+    return `
+    <div class="month-group">
+      <button class="month-toggle${openCls}" onclick="toggleMonth(this)">
+        <span class="month-name">📆 ${monthLabel}</span>
+        <span class="month-mini-bar">${seg('full')}${seg('good')}${seg('warn')}${seg('bad')}</span>
+        <span class="month-day-stats">${n} day${n!==1?'s':''} &nbsp;·&nbsp; ${statsText} &nbsp;·&nbsp; avg ${avgM}%</span>
+        <span class="month-arrow">▾</span>
+      </button>
+      <div class="month-days${openCls}">
+        ${days.map(dayCardHTML).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Auto-open only when there's a single month (e.g. fresh short session)
+  const autoOpen = sortedMonths.length === 1;
+  const html = sortedMonths.map(([, days], i) =>
+    monthGroupHTML(days[0].monthLabel, days, autoOpen && i === 0)
+  ).join('');
+
+  document.getElementById('day-breakdown-placeholder').style.display = 'none';
+  const bd = document.getElementById('day-breakdown');
+  bd.innerHTML = html;
+  bd.style.display = 'flex';
+
+  // ── Summary ──────────────────────────────────────────────────────────────────
+  if (sortedDays.length >= 1) {
+    // Tally days by verdict class
+    const tally = { full: 0, good: 0, warn: 0, bad: 0 };
+    const dayPcts = [];
+
+    for (const [, rows] of sortedDays) {
+      const results  = rows.map(evalRow);
+      const pct      = results.length > 0 ? Math.round(results.filter(r => r.ok).length / results.length * 100) : 0;
+      tally[dayClass(pct)]++;
+      dayPcts.push(pct);
+    }
+
+    const total      = sortedDays.length;
+    const playable   = tally.full + tally.good;           // ≥75%
+    const partial    = tally.warn;                         // 40–74%
+    const unplayable = tally.bad;                          // <40%
+    const avgPct     = Math.round(dayPcts.reduce((a, b) => a + b, 0) / total);
+    // "Effective playable days": full=1, good=0.85, warn=0.5, bad=0
+    const effective  = (tally.full * 1.0 + tally.good * 0.85 + tally.warn * 0.5).toFixed(1);
+
+    // Stacked bar widths
+    const w = cls => total > 0 ? (tally[cls] / total * 100).toFixed(1) + '%' : '0%';
+    document.getElementById('sum-full').style.width = w('full');
+    document.getElementById('sum-good').style.width = w('good');
+    document.getElementById('sum-warn').style.width = w('warn');
+    document.getElementById('sum-bad').style.width  = w('bad');
+
+    document.getElementById('summary-legend').innerHTML = [
+      ['#3fb950', `Fully playable (100%) — ${tally.full}d`],
+      ['#58a6ff', `Mostly playable (≥75%) — ${tally.good}d`],
+      ['#d29922', `Partially playable (40–74%) — ${tally.warn}d`],
+      ['#f78166', `Not playable (<40%) — ${tally.bad}d`],
+    ].filter(([,label]) => !label.endsWith('0d')).map(([color, label]) =>
+      `<span class="leg-item"><span class="leg-dot" style="background:${color}"></span>${label}</span>`
+    ).join('');
+
+    document.getElementById('summary-stats').innerHTML = `
+      <div class="sum-stat">
+        <div class="sv" style="color:#3fb950">${playable}<span style="font-size:0.9rem;color:var(--muted)">/${total}</span></div>
+        <div class="sl">playable days<br>(≥75% of readings)</div>
+      </div>
+      <div class="sum-stat">
+        <div class="sv" style="color:#d29922">${partial}<span style="font-size:0.9rem;color:var(--muted)">/${total}</span></div>
+        <div class="sl">partially playable<br>(40–74%)</div>
+      </div>
+      <div class="sum-stat">
+        <div class="sv" style="color:#f78166">${unplayable}<span style="font-size:0.9rem;color:var(--muted)">/${total}</span></div>
+        <div class="sl">not playable<br>(<40%)</div>
+      </div>
+      <div class="sum-stat">
+        <div class="sv" style="color:var(--accent-blue)">${effective}</div>
+        <div class="sl">effective playable<br>days (weighted)</div>
+      </div>
+      <div class="sum-stat">
+        <div class="sv" style="color:var(--text)">${avgPct}%</div>
+        <div class="sl">avg playability<br>across session</div>
+      </div>
+    `;
+
+    document.getElementById('session-summary').style.display = 'block';
+  }
+}
+
+// ── Month toggle ─────────────────────────────
+function toggleMonth(btn) {
+  const days = btn.nextElementSibling;
+  btn.classList.toggle('open');
+  days.classList.toggle('open');
+}
+
+// ── Baseline toggle ──────────────────────────
+function toggleBaseline() {
+  const btn   = document.getElementById('baseline-toggle');
+  const inner = document.getElementById('baseline-inner');
+  btn.classList.toggle('open');
+  inner.classList.toggle('open');
+}
+
+// Re-evaluate whenever thresholds change
+['th-wind','th-gusts','th-tmin','th-tmax','th-rain'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => { if (rawRows.length) evaluateSession(); });
+});
+
+// evaluateSession() is now called directly inside loadCSV — no override needed
+
+// ── Geocoding (Open-Meteo) ───────────────────
+async function geocode(cityName) {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!data.results || !data.results.length) throw new Error(`Location "${cityName}" not found.`);
+  return { lat: data.results[0].latitude, lon: data.results[0].longitude, name: data.results[0].name + ', ' + (data.results[0].country || '') };
+}
+
+// ── Historical fetch (Open-Meteo archive) ────
+async function fetchHistorical(lat, lon, years) {
+  const endDate   = new Date();
+  endDate.setDate(endDate.getDate() - 5); // ERA5 has ~5 day delay
+  const startDate = new Date(endDate);
+  startDate.setFullYear(startDate.getFullYear() - years);
+
+  const fmt = d => d.toISOString().split('T')[0];
+  const vars = [
+    'precipitation_sum',
+    'temperature_2m_max',
+    'temperature_2m_min',
+    'wind_speed_10m_max',
+    'wind_gusts_10m_max'
+  ].join(',');
+
+  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${fmt(startDate)}&end_date=${fmt(endDate)}&daily=${vars}&timezone=auto&wind_speed_unit=kmh`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Open-Meteo API error: ' + res.status);
+  return res.json();
+}
+
+// ── Playable day check ───────────────────────
+function isPlayable(day, th) {
+  if (day.rain   >  th.rain)  return false;
+  if (day.wind   >  th.wind)  return false;
+  if (day.gusts  >  th.gusts) return false;
+  if (day.tmax   >  th.tmax)  return false;
+  if (day.tmin   <  th.tmin)  return false;
+  return true;
+}
+
+// ── Build baseline chart ─────────────────────
+let baselineChartInst = null;
+
+function renderBaseline(apiData, locationName, years) {
+  const th     = getThresholds();
+  const daily  = apiData.daily;
+  const n      = daily.time.length;
+
+  // Build per-month playable day counts (average over years)
+  // monthlyTotals[m] = { playable: N, total: N }
+  const monthlyTotals = Array.from({length: 12}, () => ({ playable: 0, total: 0 }));
+
+  for (let i = 0; i < n; i++) {
+    const m = new Date(daily.time[i]).getMonth(); // 0-11
+    const day = {
+      rain:  daily.precipitation_sum[i]   ?? 0,
+      tmax:  daily.temperature_2m_max[i]  ?? 20,
+      tmin:  daily.temperature_2m_min[i]  ?? 10,
+      wind:  daily.wind_speed_10m_max[i]  ?? 0,
+      gusts: daily.wind_gusts_10m_max[i]  ?? 0,
+    };
+    monthlyTotals[m].total++;
+    if (isPlayable(day, th)) monthlyTotals[m].playable++;
+  }
+
+  // Average playable days per month (across the years)
+  const avgPerMonth = monthlyTotals.map(m => m.total > 0 ? Math.round(m.playable / years) : 0);
+  const totalPerYear = Math.round(avgPerMonth.reduce((a, b) => a + b, 0));
+
+  // Best / worst month
+  const bestIdx  = avgPerMonth.indexOf(Math.max(...avgPerMonth));
+  const worstIdx = avgPerMonth.indexOf(Math.min(...avgPerMonth));
+  const months   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Highlight current month
+  const currentMonth = new Date().getMonth();
+  const bgColors = avgPerMonth.map((_, i) =>
+    i === currentMonth ? 'rgba(88,166,255,0.85)' : 'rgba(63,185,80,0.55)'
+  );
+  const borderColors = avgPerMonth.map((_, i) =>
+    i === currentMonth ? '#58a6ff' : '#3fb950'
+  );
+
+  // Render
+  if (baselineChartInst) baselineChartInst.destroy();
+  document.getElementById('baseline-placeholder').style.display = 'none';
+  document.getElementById('baseline-chart-area').style.display  = 'block';
+
+  baselineChartInst = new Chart(document.getElementById('baselineChart'), {
+    type: 'bar',
+    data: {
+      labels: months,
+      datasets: [{
+        label: 'Avg playable days',
+        data: avgPerMonth,
+        backgroundColor: bgColors,
+        borderColor: borderColors,
+        borderWidth: 1,
+        borderRadius: 5,
+      }]
+    },
+    options: {
+      responsive: true, animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1c2128', borderColor: '#30363d', borderWidth: 1,
+          titleColor: '#e6edf3', bodyColor: '#8b949e',
+          callbacks: {
+            title: items => months[items[0].dataIndex],
+            label: ctx => ` ${ctx.raw} playable days/month (avg over ${years} yrs)`,
+            afterLabel: ctx => {
+              const m = monthlyTotals[ctx.dataIndex];
+              const daysInMonth = Math.round(m.total / years);
+              const pct = daysInMonth > 0 ? Math.round(ctx.raw / daysInMonth * 100) : 0;
+              return ` ${pct}% of days are playable`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 11 } }, grid: { color: gridColor }, border: { color: gridColor } },
+        y: { min: 0, max: 31, ticks: { color: textColor, font: { size: 10 }, stepSize: 5 }, grid: { color: gridColor }, border: { color: gridColor },
+             title: { display: true, text: 'days / month', color: textColor, font: { size: 10 } } }
+      }
+    }
+  });
+
+  // Summary stats
+  document.getElementById('baseline-title').textContent = `📊 Monthly Playable Days — ${locationName} (${years}-year avg)`;
+  document.getElementById('baseline-stats').innerHTML = `
+    <div class="b-stat"><div class="bv">${totalPerYear}</div><div class="bl">playable days/year</div></div>
+    <div class="b-stat"><div class="bv">${Math.round(totalPerYear / 365 * 100)}%</div><div class="bl">of days playable</div></div>
+    <div class="b-stat"><div class="bv">${months[bestIdx]}</div><div class="bl">best month (${avgPerMonth[bestIdx]}d)</div></div>
+    <div class="b-stat"><div class="bv">${months[worstIdx]}</div><div class="bl">worst month (${avgPerMonth[worstIdx]}d)</div></div>
+  `;
+}
+
+// ── Fetch button ─────────────────────────────
+document.getElementById('fetch-btn').addEventListener('click', async () => {
+  const btn     = document.getElementById('fetch-btn');
+  const status  = document.getElementById('fetch-status');
+  const cityVal = document.getElementById('city-input').value.trim();
+  let lat = parseFloat(document.getElementById('lat-input').value);
+  let lon = parseFloat(document.getElementById('lon-input').value);
+  const years   = parseInt(document.getElementById('years-select').value) || 5;
+  let locationName = cityVal || `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
+
+  btn.disabled = true;
+  try {
+    // Geocode if city name given
+    if (cityVal) {
+      status.textContent = '🔍 Geocoding location…';
+      const geo = await geocode(cityVal);
+      lat = geo.lat;
+      lon = geo.lon;
+      locationName = geo.name;
+      document.getElementById('lat-input').value = lat.toFixed(4);
+      document.getElementById('lon-input').value = lon.toFixed(4);
+    }
+
+    if (isNaN(lat) || isNaN(lon)) {
+      status.textContent = '⚠️ Please enter a city name or coordinates.';
+      btn.disabled = false;
+      return;
+    }
+
+    status.textContent = `⬇️ Fetching ${years} years of ERA5 data…`;
+    const apiData = await fetchHistorical(lat, lon, years);
+    status.textContent = `✅ Loaded ${apiData.daily.time.length} days of data.`;
+    renderBaseline(apiData, locationName, years);
+
+  } catch (err) {
+    status.textContent = '❌ ' + err.message;
+    console.error(err);
+  }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>
