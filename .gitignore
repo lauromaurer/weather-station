@@ -1,0 +1,18 @@
+# Arduino / PlatformIO build artifacts
+build/
+.pio/
+*.hex
+*.elf
+*.bin
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

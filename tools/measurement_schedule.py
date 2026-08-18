@@ -16,8 +16,8 @@ Usage:
         → non-interactive, today as target day
 
 Configuration (mirrors firmware defines):
-    STATION_LAT          = 47.33
-    STATION_LON          = 8.58
+    STATION_LAT          = 42.76
+    STATION_LON          = 10.29
     DAILY_MEASUREMENTS   = 20
     SUNRISE_BUFFER_MIN   = 30
     SUNSET_BUFFER_MIN    = 5
@@ -29,8 +29,8 @@ from datetime import date, datetime, timedelta
 
 
 # ── Station configuration (must match firmware) ────────────────────────────────
-STATION_LAT         = 47.33
-STATION_LON         = 8.58
+STATION_LAT         = 42.76
+STATION_LON         = 10.29
 DAILY_MEASUREMENTS  = 20
 SUNRISE_BUFFER_MIN  = 30
 SUNSET_BUFFER_MIN   = 5
